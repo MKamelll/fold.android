@@ -133,7 +133,7 @@ fun Drawer() {
                 )
             }
         ) { innerPadding ->
-            NavHost(navController, startDestination = "merge") {
+            NavHost(navController, startDestination = "split") {
                 composable("merge") {
                     MergeScreen(Modifier.padding(innerPadding))
                 }
