@@ -63,7 +63,8 @@ fun SplitScreen(modifier: Modifier = Modifier) {
     var isSplitting by remember { mutableStateOf(false) }
     var input by remember { mutableStateOf("") }
     val context = LocalContext.current
-    var fullScreenPage by remember { mutableStateOf<Pair<Bitmap, Int>?>(null) }
+    var fullScreenPageIndex by remember { mutableStateOf<Int?>(null) }
+    var fullScreenPageBitmap by remember { mutableStateOf<Bitmap?>(null) }
     val pages = remember { mutableStateListOf<Bitmap?>() }
     val listState = rememberLazyListState()
     val launcher = rememberLauncherForActivityResult(
@@ -104,7 +105,7 @@ fun SplitScreen(modifier: Modifier = Modifier) {
                                     ) -> {
                                         if (pages[index] == null) {
                                             val page = renderer.openPage(index)
-                                            val scale = 0.7f
+                                            val scale = 0.5f
                                             val bitmap = createBitmap(
                                                 (page.width * scale).toInt(),
                                                 (page.height * scale).toInt()
@@ -137,10 +138,31 @@ fun SplitScreen(modifier: Modifier = Modifier) {
 
     }
 
+    LaunchedEffect(fullScreenPageIndex) {
+        fullScreenPageIndex?.let { i ->
+            file?.let {
+                withContext(Dispatchers.IO) {
+                    val fd =
+                        context.contentResolver.openFileDescriptor(it, "r") ?: return@withContext
+                    val renderer = PdfRenderer(fd)
+                    val page = renderer.openPage(i)
+                    val bitmap = createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
+                    bitmap.eraseColor(android.graphics.Color.WHITE)
+                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    page.close()
+                    renderer.close()
+                    fd.close()
+                    fullScreenPageBitmap = bitmap
+                }
+            }
+        }
+    }
+
     BackHandler(
-        enabled = fullScreenPage != null
+        enabled = fullScreenPageIndex != null
     ) {
-        fullScreenPage = null
+        fullScreenPageIndex = null
+        fullScreenPageBitmap = null
     }
 
     Box(
@@ -189,7 +211,7 @@ fun SplitScreen(modifier: Modifier = Modifier) {
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .clickable {
-                                            fullScreenPage = Pair(bitmap, index)
+                                            fullScreenPageIndex = index
                                         },
                                     contentScale = ContentScale.Fit,
                                     bitmap = bitmap.asImageBitmap(),
@@ -220,20 +242,21 @@ fun SplitScreen(modifier: Modifier = Modifier) {
                 }
             }
         }
-        fullScreenPage?.let { (bitmap, index) ->
+        fullScreenPageIndex?.let { index ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black)
-                    .clickable { fullScreenPage = null },
+                    .background(Color.Black),
                 contentAlignment = Alignment.Center
             ) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "fullscreen of page $index",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit
-                )
+                fullScreenPageBitmap?.let {
+                    Image(
+                        bitmap = it.asImageBitmap(),
+                        contentDescription = "fullscreen of page $index",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                }
             }
         }
     }
